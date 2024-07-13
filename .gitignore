@@ -1,3 +1,4 @@
-/carhorn.dol
-/carhorn.elf
-/build/
+.vscode/
+carhorn.dol
+carhorn.elf
+build/
