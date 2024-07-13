@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "wwu_ogg.h": "c",
+        "cursor_png.h": "c",
+        "std_btn_png.h": "c",
+        "buttons.h": "c",
+        "test_jpg.h": "c",
+        "oggplayer.h": "c",
+        "button_click_pcm.h": "c",
+        "button_over_pcm.h": "c",
+        "wiibg_jpg.h": "c"
+    }
+}
