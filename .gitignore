@@ -6,3 +6,5 @@ html/
 latex/
 packCollector/downloads
 packCollector/*.html
+HBApp/
+releases/
