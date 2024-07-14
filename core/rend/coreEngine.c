@@ -22,7 +22,7 @@
 void CoreEngine_Init() {
     // Init audio.
     ASND_Init();
-    
+
     // Init Graphics.
     GRRLIB_Init();
 

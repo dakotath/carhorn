@@ -51,6 +51,7 @@ char* selPackName;
 int selPackAudio = 0;
 int packMaxAudio = 0;
 
+// Bottom features.
 void extractBIP();
 
 // Sample hover function.
@@ -267,6 +268,25 @@ int main(int argc, char** argv)
     }
 }
 
+int exBIPCB(const char* file, void* arg) {
+    char* exText = malloc(1024);
+    sprintf(exText, "Extracted: %s", file);
+
+    // Quickly load in our font.
+    GRRLIB_ttfFont* globalFont;
+    globalFont = GRRLIB_LoadTTF(font_ttf, font_ttf_size);
+
+    // Print and render
+    GRRLIB_PrintfTTF(0,0, globalFont, "Please wait, Extracting BIP:", 25, COL_WHITE);
+    GRRLIB_PrintfTTF(0,32, globalFont, exText, 18, COL_WHITE);
+    GRRLIB_Render();
+
+    // Free mem.
+    GRRLIB_FreeTTF(globalFont);
+    free(exText);
+    return 0;
+}
+
 void extractBIP() {
     // Save BIP to file.
     FILE* bipFile = fopen("bip.pack", "wb");
@@ -282,5 +302,5 @@ void extractBIP() {
     fclose(bipFile);
 
     // Extract the package.
-    zip_extract("bip.pack", "sd:/carhorn/packs/", NULL, NULL);
+    zip_extract("bip.pack", "sd:/carhorn/packs/", exBIPCB, NULL);
 }
