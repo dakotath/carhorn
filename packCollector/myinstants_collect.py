@@ -9,7 +9,20 @@ import struct
 import sys
 import json
 
-url = 'https://www.myinstants.com/search/?name=meme'
+url = 'https://www.myinstants.com/en/index/ca/'
+
+# Remove old downloads
+try:
+    os.rmdir("downloads")
+except Exception as e:
+    print(f"Oh well, sh*t happens: {e}")
+
+# Make downloads folder
+try:
+    os.mkdir("downloads")
+except Exception as e:
+    print(f"Oh well, sh*t happens: {e}")
+
 response = requests.get(url)
 soup = BeautifulSoup(response.content, 'html.parser')
 
@@ -93,3 +106,6 @@ for sound in sounds:
     print()
 
 print(json.dumps(finalMeta))
+
+with open("downloads/meta.json", "w") as mjd:
+    mjd.write(json.dumps(finalMeta))
