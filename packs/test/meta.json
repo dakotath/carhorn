@@ -1,0 +1,12 @@
+[
+    {
+        "file": "rizz.pcm",
+        "name": "Rizz Sound",
+        "type": "pcm8"
+    },
+    {
+        "file": "discord-join.pcm",
+        "name": "Discord Join",
+        "type": "pcm8"
+    }
+]

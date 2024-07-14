@@ -53,6 +53,7 @@ typedef struct
     bool hasPressed;                    // Prevents press funtion spamming.
     bool isHovering;
     bool isPressed;
+    bool disabled;
     int fontSize;
 } spritedbtn_options_t;
 

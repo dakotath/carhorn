@@ -18,14 +18,14 @@ include $(DEVKITPPC)/wii_rules
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
 SOURCES		:=	core core/rend core/libcjson source
-DATA		:=	data data/sfx
+DATA		:=	data data/sfx data/packs
 INCLUDES	:=	include
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
 
-CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE) -Werror
+CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
 
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map -Werror
@@ -165,6 +165,13 @@ $(OFILES_SOURCES) : $(HFILES)
 	@echo $(notdir $<)
 	$(bin2o)
 
+#---------------------------------------------------------------------------------
+# This rule links in binary data with the .zip extension
+#---------------------------------------------------------------------------------
+%.zip.o	%_zip.h :	%.zip
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	$(bin2o)
 
 -include $(DEPENDS)
 

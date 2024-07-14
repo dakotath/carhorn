@@ -83,6 +83,13 @@ spritedbtn_t CreateButton(int x, int y, char* str, spritedbtn_options_t options,
 */
 spritedbtn_assets_t GetStdBtnAssets(u32 bgColor, u32 txtColor, GRRLIB_ttfFont* font) {
     spritedbtn_assets_t stdAssets;
+
+    // Nullify
+    stdAssets.btnDownTexture = NULL;
+    stdAssets.btnHoverTexture = NULL;
+    stdAssets.btnTexture = NULL;
+    stdAssets.font = NULL;
+
     stdAssets.btnTexture = GRRLIB_LoadTexture(std_btn_png);
     stdAssets.color = bgColor;
     stdAssets.textColor = txtColor;

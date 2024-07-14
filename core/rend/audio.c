@@ -22,7 +22,7 @@
 */
 void playSfx(const void* buffer, long buffer_size, int channel)
 {
-	u32 format = VOICE_STEREO_8BIT;
+	u32 format = VOICE_MONO_8BIT;
     ASND_SetVoice(channel, format, 32000, 0, (void*)buffer, buffer_size, 255, 255, NULL);
 	ASND_Pause(0);
 }

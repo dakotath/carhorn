@@ -1,571 +1,300 @@
-#ifndef __is_included__098c74de_0994_4613_bfd7_3d7939e07c89
-#define __is_included__098c74de_0994_4613_bfd7_3d7939e07c89 1
+/*
+  Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
 
-#ifndef CJSON_BLOCKSIZE_STRING
-	#define	CJSON_BLOCKSIZE_STRING 256
-#endif
-#ifndef CJSON_BLOCKSIZE_OBJECT
-	#define CJSON_BLOCKSIZE_OBJECT 64
-#endif
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
 
-#include <stdint.h>
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+*/
+
+#ifndef cJSON__h
+#define cJSON__h
 
 #ifdef __cplusplus
-	extern "C" {
+extern "C"
+{
 #endif
 
-enum cjsonElementType {
-	cjsonUnknown,
+#if !defined(__WINDOWS__) && (defined(WIN32) || defined(WIN64) || defined(_MSC_VER) || defined(_WIN32))
+#define __WINDOWS__
+#endif
 
-	cjsonObject,
-	cjsonArray,
-	cjsonString,
-	cjsonNumber_UnsignedLong,
-	cjsonNumber_SignedLong,
-	cjsonNumber_Double,
-	cjsonTrue,
-	cjsonFalse,
-	cjsonNull
-};
+#ifdef __WINDOWS__
 
-enum cjsonError {
-	cjsonE_Ok									= 0,
+/* When compiling for windows, we specify a specific calling convention to avoid issues where we are being called from a project with a different default calling convention.  For windows you have 3 define options:
 
-	cjsonE_InvalidParam							= 1,
-	cjsonE_OutOfMemory							= 2,
-	cjsonE_AlreadyFinished						= 3,
-	cjsonE_EncodingError						= 4,
-	cjsonE_IndexOutOfBounds						= 5,
-	cjsonE_Finished								= 6,
-	cjsonE_OkRedeliver							= 7,
-	cjsonE_InvalidState							= 8,
+CJSON_HIDE_SYMBOLS - Define this in the case where you don't want to ever dllexport symbols
+CJSON_EXPORT_SYMBOLS - Define this on library build when you want to dllexport symbols (default)
+CJSON_IMPORT_SYMBOLS - Define this if you want to dllimport symbol
 
-	cjsonE_ImplementationError,
-};
+For *nix builds that support visibility attribute, you can define similar behavior by
 
-/*
-	We do interact with the system via an additional system interface.
-	This allows the usage of pooled memory allocators.
+setting default visibility to hidden by adding
+-fvisibility=hidden (for gcc)
+or
+-xldscope=hidden (for sun cc)
+to CFLAGS
+
+then using the CJSON_API_VISIBILITY flag to "export" the same symbols the way CJSON_EXPORT_SYMBOLS does
+
 */
-struct cjsonSystemAPI; /* Forward declaration */
 
-typedef enum cjsonError (*cjsonSystemAPI_Alloc)(
-	struct cjsonSystemAPI*						lpSelf,
-	unsigned long int							dwSize,
-	void**										lpDataOut
-);
-typedef enum cjsonError (*cjsonSystemAPI_Free)(
-	struct cjsonSystemAPI*						lpSelf,
-	void*										lpObject
-);
-struct cjsonSystemAPI {
-	cjsonSystemAPI_Alloc						alloc;
-	cjsonSystemAPI_Free							free;
-};
+#define CJSON_CDECL __cdecl
+#define CJSON_STDCALL __stdcall
 
-/*
-	cjsonValue is the base type of all objects.
-*/
-struct cjsonValue {
-	enum cjsonElementType				type;					/* Type can be used to cast to the correct type */
-	struct cjsonSystemAPI* 				lpSystem;				/* Reference to system is required to correctly release that object */
-};
+/* export symbols by default, this is necessary for copy pasting the C and header file */
+#if !defined(CJSON_HIDE_SYMBOLS) && !defined(CJSON_IMPORT_SYMBOLS) && !defined(CJSON_EXPORT_SYMBOLS)
+#define CJSON_EXPORT_SYMBOLS
+#endif
 
-/*
-	All numeric datatypes are stored inside cjsonNumber.
-	Depending on the type enumeration different types
-	can be stored inside the object.
-*/
-struct cjsonNumber {
-	struct cjsonValue					base;
+#if defined(CJSON_HIDE_SYMBOLS)
+#define CJSON_PUBLIC(type)   type CJSON_STDCALL
+#elif defined(CJSON_EXPORT_SYMBOLS)
+#define CJSON_PUBLIC(type)   __declspec(dllexport) type CJSON_STDCALL
+#elif defined(CJSON_IMPORT_SYMBOLS)
+#define CJSON_PUBLIC(type)   __declspec(dllimport) type CJSON_STDCALL
+#endif
+#else /* !__WINDOWS__ */
+#define CJSON_CDECL
+#define CJSON_STDCALL
 
-	union {
-		unsigned long int 				ulong;
-		signed long int					slong;
-		double							dbl;
-	} value;
-};
+#if (defined(__GNUC__) || defined(__SUNPRO_CC) || defined (__SUNPRO_C)) && defined(CJSON_API_VISIBILITY)
+#define CJSON_PUBLIC(type)   __attribute__((visibility("default"))) type
+#else
+#define CJSON_PUBLIC(type) type
+#endif
+#endif
 
-/*
-	Strings are immutable and are embedded in
-	their structure. They should be UTF-8 but
-	are handeled opaque by this library.
-*/
-struct cjsonString {
-	struct cjsonValue					base;
+/* project version */
+#define CJSON_VERSION_MAJOR 1
+#define CJSON_VERSION_MINOR 7
+#define CJSON_VERSION_PATCH 16
 
-	unsigned long int					dwStrlen;
-	char								bData[];
-};
+#include <stddef.h>
 
-/*
-	An array is an ordered unnamed list of elements.
-	To implement growable access  this is implemented
-	as an linked list of arrays with fixed size but
-	variable usage. This allows more lightweight
-	insertion and deletion than a normal array at
-	only a smaller tradeof for random access. Iteration
-	is nearly as performant as on normal arrays.
-*/
-struct cjsonArray_Page {
-	struct {
-		struct cjsonArray_Page*			lpNext;
-		struct cjsonArray_Page*			lpPrev;
-	} pageList;
+/* cJSON Types: */
+#define cJSON_Invalid (0)
+#define cJSON_False  (1 << 0)
+#define cJSON_True   (1 << 1)
+#define cJSON_NULL   (1 << 2)
+#define cJSON_Number (1 << 3)
+#define cJSON_String (1 << 4)
+#define cJSON_Array  (1 << 5)
+#define cJSON_Object (1 << 6)
+#define cJSON_Raw    (1 << 7) /* raw json */
 
-	unsigned long int					dwUsedEntries;
-	struct cjsonValue*					entries[];
-};
-struct cjsonArray {
-	struct cjsonValue					base;
+#define cJSON_IsReference 256
+#define cJSON_StringIsConst 512
 
-	unsigned long int 					dwPageSize;
-	unsigned long int					dwElementCount;
-	struct {
-		struct cjsonArray_Page*			lpFirstPage;
-		struct cjsonArray_Page*			lpLastPage;
-	} pageList;
-};
+/* The cJSON structure: */
+typedef struct cJSON
+{
+    /* next/prev allow you to walk array/object chains. Alternatively, use GetArraySize/GetArrayItem/GetObjectItem */
+    struct cJSON *next;
+    struct cJSON *prev;
+    /* An array or object item will have a child pointer pointing to a chain of the items in the array/object. */
+    struct cJSON *child;
 
-/*
-	Objects are key/value stores. Each key has to
-	be unique. They are implemented as hashmaps
-	with a fixed bucket count (at object creation).
-*/
-struct cjsonObject_BucketEntry {
-	struct {
-		struct cjsonObject_BucketEntry	*lpNext;
-		struct cjsonObject_BucketEntry	*lpPrev;
-	} bucketList;
+    /* The type of the item, as above. */
+    int type;
 
-	struct cjsonValue*					lpValue;
-	unsigned long int					dwKeyLength;
-	char								bKey[];
-};
-struct cjsonObject {
-	struct cjsonValue					base;
+    /* The item's string, if type==cJSON_String  and type == cJSON_Raw */
+    char *valuestring;
+    /* writing to valueint is DEPRECATED, use cJSON_SetNumberValue instead */
+    int valueint;
+    /* The item's number, if type==cJSON_Number */
+    double valuedouble;
 
-	/*
-		HashMap implementation
-	*/
-	unsigned long int					dwElementCount;
-	unsigned long int					dwBucketCount;
-	unsigned long int					dwBucketShiftBytes;
-	struct cjsonObject_BucketEntry*		buckets[];
-};
+    /* The item's name string, if this item is the child of, or is in the list of subitems of an object. */
+    char *string;
+} cJSON;
 
+typedef struct cJSON_Hooks
+{
+      /* malloc/free are CDECL on Windows regardless of the default calling convention of the compiler, so ensure the hooks allow passing those functions directly. */
+      void *(CJSON_CDECL *malloc_fn)(size_t sz);
+      void (CJSON_CDECL *free_fn)(void *ptr);
+} cJSON_Hooks;
 
-/*
-	Access and manipulation definitions and functions
-*/
-#define cjsonIsNull(_x) 	(_x->type == cjsonNull)
-#define cjsonIsTrue(_x) 	(_x->type == cjsonTrue)
-#define cjsonIsFalse(_x) 	(_x->type == cjsonFalse)
-#define cjsonIsNumeric(_x) 	((_x->type == cjsonNumber_Double) || (_x->type == cjsonNumber_SignedLong) || (_x->type == cjsonNumber_UnsignedLong))
-#define cjsonIsULong(_x) 	(_x->type == cjsonNumber_UnsignedLong)
-#define cjsonIsSLong(_x) 	(_x->type == cjsonNumber_SignedLong)
-#define cjsonIsDouble(_x) 	(_x->type == cjsonNumber_Double)
-#define cjsonIsString(_x) 	(_x->type == cjsonString);
-#define cjsonIsArray(_x) 	(_x->type == cjsonArray);
-#define cjsonIsObject(_x) 	(_x->type == cjsonObject);
+typedef int cJSON_bool;
 
-void cjsonReleaseValue(
-	struct cjsonValue* lpValue
-);
+/* Limits how deeply nested arrays/objects can be before cJSON rejects to parse them.
+ * This is to prevent stack overflows. */
+#ifndef CJSON_NESTING_LIMIT
+#define CJSON_NESTING_LIMIT 1000
+#endif
 
-/*
-	JSON Array access
-*/
-enum cjsonError cjsonArray_Create(
-	struct cjsonValue**	lpArrayOut,
-	struct cjsonSystemAPI* lpSystem
-);
-unsigned long int cjsonArray_Length(
-	const struct cjsonValue* lpArray
-);
-enum cjsonError cjsonArray_Get(
-	const struct cjsonValue* lpArray,
-	unsigned long int 	idx,
-	struct cjsonValue** lpOut
-);
-enum cjsonError cjsonArray_Set(
-	struct cjsonValue* 	lpArray,
-	unsigned long int 	idx,
-	struct cjsonValue* 	lpIn
-);
-enum cjsonError cjsonArray_Push(
-	struct cjsonValue* 	lpArray,
-	struct cjsonValue* 	lpValue
-);
-typedef enum cjsonError (*cjsonArray_Iterate_Callback)(
-	unsigned long int index,
-	struct cjsonValue* lpValue,
-	void* lpFreeParam
-);
-enum cjsonError cjsonArray_Iterate(
-	struct cjsonValue* lpValue,
-	cjsonArray_Iterate_Callback callback,
-	void* lpFreeParam
-);
+/* returns the version of cJSON as a string */
+CJSON_PUBLIC(const char*) cJSON_Version(void);
 
-/*
-	JSON object access
-*/
-enum cjsonError cjsonObject_Create(
-	struct cjsonValue** lpOut,
-	struct cjsonSystemAPI* lpSystem
-);
-enum cjsonError cjsonObject_Set(
-	struct cjsonValue* lpObject,
-	const char* lpKey,
-	unsigned long int dwKeyLength,
-	struct cjsonValue* lpValue
-);
-enum cjsonError cjsonObject_Get(
-	const struct cjsonValue* lpObject,
-	const char* lpKey,
-	unsigned long int dwKeyLength,
-	struct cjsonValue** lpValueOut
-);
-enum cjsonError cjsonObject_HasKey(
-	const struct cjsonValue* lpObject,
-	const char* lpKey,
-	unsigned long int dwKeyLength
-);
-typedef enum cjsonError (*cjsonObject_Iterate_Callback)(
-	char* lpKey,
-	unsigned long int dwKeyLength,
-	struct cjsonValue* lpValue,
-	void* lpFreeParam
-);
-enum cjsonError cjsonObject_Iterate(
-	const struct cjsonValue* lpObject,
-	cjsonObject_Iterate_Callback callback,
-	void* callbackFreeParam
-);
+/* Supply malloc, realloc and free functions to cJSON */
+CJSON_PUBLIC(void) cJSON_InitHooks(cJSON_Hooks* hooks);
 
-/*
-	Number access
-*/
-enum cjsonError cjsonNumber_Create(
-	struct cjsonValue** lpOut,
-	struct cjsonSystemAPI* lpSystem
-);
-unsigned long int cjsonObject_GetAsULong(
-	struct cjsonValue* lpValue
-);
-signed long int cjsonObject_GetAsSLong(
-	struct cjsonValue* lpValue
-);
-double cjsonObject_GetAsDouble(
-	struct cjsonValue* lpValue
-);
-enum cjsonError cjsonNumber_SetULong(
-	struct cjsonValue* lpValue,
-	unsigned long int value
-);
-enum cjsonError cjsonNumber_SetSLong(
-	struct cjsonValue* lpValue,
-	signed long int value
-);
-enum cjsonError cjsonNumber_SetDouble(
-	struct cjsonValue* lpValue,
-	double value
-);
+/* Memory Management: the caller is always responsible to free the results from all variants of cJSON_Parse (with cJSON_Delete) and cJSON_Print (with stdlib free, cJSON_Hooks.free_fn, or cJSON_free as appropriate). The exception is cJSON_PrintPreallocated, where the caller has full responsibility of the buffer. */
+/* Supply a block of JSON, and this returns a cJSON object you can interrogate. */
+CJSON_PUBLIC(cJSON *) cJSON_Parse(const char *value);
+CJSON_PUBLIC(cJSON *) cJSON_ParseWithLength(const char *value, size_t buffer_length);
+/* ParseWithOpts allows you to require (and check) that the JSON is null terminated, and to retrieve the pointer to the final byte parsed. */
+/* If you supply a ptr in return_parse_end and parsing fails, then return_parse_end will contain a pointer to the error so will match cJSON_GetErrorPtr(). */
+CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_bool require_null_terminated);
+CJSON_PUBLIC(cJSON *) cJSON_ParseWithLengthOpts(const char *value, size_t buffer_length, const char **return_parse_end, cJSON_bool require_null_terminated);
 
-/*
-	String access
-*/
-enum cjsonError cjsonString_Create(
-	struct cjsonValue** lpStringOut,
-	const char* lpData,
-	unsigned long int dwDataLength,
-	struct cjsonSystemAPI* lpSystem
-);
-char* cjsonString_Get(
-	struct cjsonValue* lpValue
-);
-unsigned long int cjsonString_Strlen(
-	struct cjsonValue* lpValue
-);
+/* Render a cJSON entity to text for transfer/storage. */
+CJSON_PUBLIC(char *) cJSON_Print(const cJSON *item);
+/* Render a cJSON entity to text for transfer/storage without any formatting. */
+CJSON_PUBLIC(char *) cJSON_PrintUnformatted(const cJSON *item);
+/* Render a cJSON entity to text using a buffered strategy. prebuffer is a guess at the final size. guessing well reduces reallocation. fmt=0 gives unformatted, =1 gives formatted */
+CJSON_PUBLIC(char *) cJSON_PrintBuffered(const cJSON *item, int prebuffer, cJSON_bool fmt);
+/* Render a cJSON entity to text using a buffer already allocated in memory with given length. Returns 1 on success and 0 on failure. */
+/* NOTE: cJSON is not always 100% accurate in estimating how much memory it will use, so to be safe allocate 5 bytes more than you actually need */
+CJSON_PUBLIC(cJSON_bool) cJSON_PrintPreallocated(cJSON *item, char *buffer, const int length, const cJSON_bool format);
+/* Delete a cJSON entity and all subentities. */
+CJSON_PUBLIC(void) cJSON_Delete(cJSON *item);
 
-/*
-	Special objects
-*/
-enum cjsonError cjsonTrue_Create(
-	struct cjsonValue** lpOut,
-	struct cjsonSystemAPI* lpSystem
-);
-enum cjsonError cjsonFalse_Create(
-	struct cjsonValue** lpOut,
-	struct cjsonSystemAPI* lpSystem
-);
-enum cjsonError cjsonNull_Create(
-	struct cjsonValue** lpOut,
-	struct cjsonSystemAPI* lpSystem
-);
-enum cjsonError cjsonBoolean_Set(
-	struct cjsonValue* lpValue,
-	int value
-);
+/* Returns the number of items in an array (or object). */
+CJSON_PUBLIC(int) cJSON_GetArraySize(const cJSON *array);
+/* Retrieve item number "index" from array "array". Returns NULL if unsuccessful. */
+CJSON_PUBLIC(cJSON *) cJSON_GetArrayItem(const cJSON *array, int index);
+/* Get item "string" from object. Case insensitive. */
+CJSON_PUBLIC(cJSON *) cJSON_GetObjectItem(const cJSON * const object, const char * const string);
+CJSON_PUBLIC(cJSON *) cJSON_GetObjectItemCaseSensitive(const cJSON * const object, const char * const string);
+CJSON_PUBLIC(cJSON_bool) cJSON_HasObjectItem(const cJSON *object, const char *string);
+/* For analysing failed parses. This returns a pointer to the parse error. You'll probably need to look a few chars back to make sense of it. Defined when cJSON_Parse() returns 0. 0 when cJSON_Parse() succeeds. */
+CJSON_PUBLIC(const char *) cJSON_GetErrorPtr(void);
 
-/*
-	Parser (Deserializer)
-*/
-#define CJSON_PARSER_FLAG__STREAMINGMODE		0x00000001	/* Streaming mode allows multiple "root" objects but requires an document callback */
-/* Note that duplicate keys are NOT SUPPORTED CURRENTLY! */
-#define CJSON_PARSER_FLAG__ALLOWDUPLICATEKEYS	0x00000002	/* Silently ignore duplicate keys inside objects and always use the last one. If not set raise an parser error on duplicate keys */
+/* Check item type and return its value */
+CJSON_PUBLIC(char *) cJSON_GetStringValue(const cJSON * const item);
+CJSON_PUBLIC(double) cJSON_GetNumberValue(const cJSON * const item);
 
-#define CJSON_PARSER_FLAG__INTERNAL_DONE		0x80000000	/* Used to signal that we are not in streaming mode and have already finished */
+/* These functions check the type of an item */
+CJSON_PUBLIC(cJSON_bool) cJSON_IsInvalid(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsFalse(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsTrue(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsBool(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsNull(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsNumber(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsString(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsArray(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsObject(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsRaw(const cJSON * const item);
 
-struct cjsonParser_BufferChain_Entry {
-	struct cjsonParser_BufferChain_Entry*		lpNext;
-	unsigned long int							dwUsedBytes;
-	char										bData[];
-};
-struct cjsonParser_BufferChain {
-	struct cjsonParser_BufferChain_Entry*		lpFirst;
-	struct cjsonParser_BufferChain_Entry*		lpLast;
-	unsigned long int							dwPageSize;
-	unsigned long int							dwBytesUsed;
-};
+/* These calls create a cJSON item of the appropriate type. */
+CJSON_PUBLIC(cJSON *) cJSON_CreateNull(void);
+CJSON_PUBLIC(cJSON *) cJSON_CreateTrue(void);
+CJSON_PUBLIC(cJSON *) cJSON_CreateFalse(void);
+CJSON_PUBLIC(cJSON *) cJSON_CreateBool(cJSON_bool boolean);
+CJSON_PUBLIC(cJSON *) cJSON_CreateNumber(double num);
+CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string);
+/* raw json */
+CJSON_PUBLIC(cJSON *) cJSON_CreateRaw(const char *raw);
+CJSON_PUBLIC(cJSON *) cJSON_CreateArray(void);
+CJSON_PUBLIC(cJSON *) cJSON_CreateObject(void);
 
-enum cjsonParser_StateStackType {
-	cjsonParser_StateStackType__Object,
-	cjsonParser_StateStackType__Array,
-	cjsonParser_StateStackType__Number,
-	cjsonParser_StateStackType__String,
-	cjsonParser_StateStackType__Constant
-};
+/* Create a string where valuestring references a string so
+ * it will not be freed by cJSON_Delete */
+CJSON_PUBLIC(cJSON *) cJSON_CreateStringReference(const char *string);
+/* Create an object/array that only references it's elements so
+ * they will not be freed by cJSON_Delete */
+CJSON_PUBLIC(cJSON *) cJSON_CreateObjectReference(const cJSON *child);
+CJSON_PUBLIC(cJSON *) cJSON_CreateArrayReference(const cJSON *child);
 
-struct cjsonParser_StateStackElement {
-	enum cjsonParser_StateStackType				type;
-	struct cjsonParser_StateStackElement*		lpNext;
-};
-struct cjsonParser_StateStackElement_Constant {
-	struct cjsonParser_StateStackElement		base;
-	unsigned long int							dwMatchedBytes;
-	enum cjsonElementType						elmType;
-};
+/* These utilities create an Array of count items.
+ * The parameter count cannot be greater than the number of elements in the number array, otherwise array access will be out of bounds.*/
+CJSON_PUBLIC(cJSON *) cJSON_CreateIntArray(const int *numbers, int count);
+CJSON_PUBLIC(cJSON *) cJSON_CreateFloatArray(const float *numbers, int count);
+CJSON_PUBLIC(cJSON *) cJSON_CreateDoubleArray(const double *numbers, int count);
+CJSON_PUBLIC(cJSON *) cJSON_CreateStringArray(const char *const *strings, int count);
 
-enum cjsonParser_StateStackElement_String_State {
-	cjsonParser_StateStackElement_String_State__Normal,
-	cjsonParser_StateStackElement_String_State__Escaped,
-	cjsonParser_StateStackElement_String_State__UTF16Codepoint
-};
-struct cjsonParser_StateStackElement_String {
-	struct cjsonParser_StateStackElement		base;
-	struct cjsonParser_BufferChain				buf;
-	enum cjsonParser_StateStackElement_String_State state;
-	unsigned long int							dwUBytes;
-	unsigned long int							dwUCodepoint;
-};
+/* Append item to the specified array/object. */
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToArray(cJSON *array, cJSON *item);
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToObject(cJSON *object, const char *string, cJSON *item);
+/* Use this when string is definitely const (i.e. a literal, or as good as), and will definitely survive the cJSON object.
+ * WARNING: When this function was used, make sure to always check that (item->type & cJSON_StringIsConst) is zero before
+ * writing to `item->string` */
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item);
+/* Append reference to item to the specified array/object. Use this when you want to add an existing cJSON to a new cJSON, but don't want to corrupt your existing cJSON. */
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item);
+CJSON_PUBLIC(cJSON_bool) cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item);
 
-enum cjsonParser_StateStackElement_Array_State {
-	cjsonParser_StateStackElement_Array_State_NoComma,
-	cjsonParser_StateStackElement_Array_State_GotComma
-};
-struct cjsonParser_StateStackElement_Array {
-	struct cjsonParser_StateStackElement			base;
-	struct cjsonValue*								lpArrayObject;
-	enum cjsonParser_StateStackElement_Array_State	state;
-};
+/* Remove/Detach items from Arrays/Objects. */
+CJSON_PUBLIC(cJSON *) cJSON_DetachItemViaPointer(cJSON *parent, cJSON * const item);
+CJSON_PUBLIC(cJSON *) cJSON_DetachItemFromArray(cJSON *array, int which);
+CJSON_PUBLIC(void) cJSON_DeleteItemFromArray(cJSON *array, int which);
+CJSON_PUBLIC(cJSON *) cJSON_DetachItemFromObject(cJSON *object, const char *string);
+CJSON_PUBLIC(cJSON *) cJSON_DetachItemFromObjectCaseSensitive(cJSON *object, const char *string);
+CJSON_PUBLIC(void) cJSON_DeleteItemFromObject(cJSON *object, const char *string);
+CJSON_PUBLIC(void) cJSON_DeleteItemFromObjectCaseSensitive(cJSON *object, const char *string);
 
-enum cjsonParser_StateStackElement_Object_State {
-	cjsonParser_StateStackElement_Object_State__ExpectKey,		/* If currently NO objects have been read this can directly go into closed state */
-	cjsonParser_StateStackElement_Object_State__ReadKey,		/* Colon is expected */
-	cjsonParser_StateStackElement_Object_State__ExpectObject,	/* The object has not been started but the colon has been seen */
-	cjsonParser_StateStackElement_Object_State__ReadObject		/* Either comma or end of object are expected */
-};
-struct cjsonParser_StateStackElement_Object {
-	struct cjsonParser_StateStackElement			base;
-	struct cjsonValue*								lpObjectObject;
-	unsigned long int								dwReadObjects;
-	enum cjsonParser_StateStackElement_Object_State	state;
+/* Update array items. */
+CJSON_PUBLIC(cJSON_bool) cJSON_InsertItemInArray(cJSON *array, int which, cJSON *newitem); /* Shifts pre-existing items to the right. */
+CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemViaPointer(cJSON * const parent, cJSON * const item, cJSON * replacement);
+CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem);
+CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInObject(cJSON *object,const char *string,cJSON *newitem);
+CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInObjectCaseSensitive(cJSON *object,const char *string,cJSON *newitem);
 
-	char*											lpCurrentKey;
-	unsigned long int								dwCurrentKeyLength;
-};
+/* Duplicate a cJSON item */
+CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse);
+/* Duplicate will create a new, identical cJSON item to the one you pass, in new memory that will
+ * need to be released. With recurse!=0, it will duplicate any children connected to the item.
+ * The item->next and ->prev pointers are always zero on return from Duplicate. */
+/* Recursively compare two cJSON items for equality. If either a or b is NULL or invalid, they will be considered unequal.
+ * case_sensitive determines if object keys are treated case sensitive (1) or case insensitive (0) */
+CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * const b, const cJSON_bool case_sensitive);
 
+/* Minify a strings, remove blank characters(such as ' ', '\t', '\r', '\n') from strings.
+ * The input pointer json cannot point to a read-only address area, such as a string constant, 
+ * but should point to a readable and writable address area. */
+CJSON_PUBLIC(void) cJSON_Minify(char *json);
 
-enum cjsonParser_StateStackElement_Number_State {
-	cjsonParser_StateStackElement_Number_State__FirstSymbol,
-	cjsonParser_StateStackElement_Number_State__IntegerDigits,
-	cjsonParser_StateStackElement_Number_State__FractionalDigitsFirst,
-	cjsonParser_StateStackElement_Number_State__FractionalDigits,
-	cjsonParser_StateStackElement_Number_State__ExponentFirst,
-	cjsonParser_StateStackElement_Number_State__ExponentFirstAfterSign,
-	cjsonParser_StateStackElement_Number_State__Exponent
-};
-struct cjsonParser_StateStackElement_Number {
-	struct cjsonParser_StateStackElement			base;
+/* Helper functions for creating and adding items to an object at the same time.
+ * They return the added item or NULL on failure. */
+CJSON_PUBLIC(cJSON*) cJSON_AddNullToObject(cJSON * const object, const char * const name);
+CJSON_PUBLIC(cJSON*) cJSON_AddTrueToObject(cJSON * const object, const char * const name);
+CJSON_PUBLIC(cJSON*) cJSON_AddFalseToObject(cJSON * const object, const char * const name);
+CJSON_PUBLIC(cJSON*) cJSON_AddBoolToObject(cJSON * const object, const char * const name, const cJSON_bool boolean);
+CJSON_PUBLIC(cJSON*) cJSON_AddNumberToObject(cJSON * const object, const char * const name, const double number);
+CJSON_PUBLIC(cJSON*) cJSON_AddStringToObject(cJSON * const object, const char * const name, const char * const string);
+CJSON_PUBLIC(cJSON*) cJSON_AddRawToObject(cJSON * const object, const char * const name, const char * const raw);
+CJSON_PUBLIC(cJSON*) cJSON_AddObjectToObject(cJSON * const object, const char * const name);
+CJSON_PUBLIC(cJSON*) cJSON_AddArrayToObject(cJSON * const object, const char * const name);
 
-	union {
-		unsigned long int								ulong;
-		signed long int									slong;
-		double											dDouble;
-	} currentValue;
+/* When assigning an integer value, it needs to be propagated to valuedouble too. */
+#define cJSON_SetIntValue(object, number) ((object) ? (object)->valueint = (object)->valuedouble = (number) : (number))
+/* helper for the cJSON_SetNumberValue macro */
+CJSON_PUBLIC(double) cJSON_SetNumberHelper(cJSON *object, double number);
+#define cJSON_SetNumberValue(object, number) ((object != NULL) ? cJSON_SetNumberHelper(object, (double)number) : (number))
+/* Change the valuestring of a cJSON_String object, only takes effect when type of object is cJSON_String */
+CJSON_PUBLIC(char*) cJSON_SetValuestring(cJSON *object, const char *valuestring);
 
-	double												dCurrentMultiplier;
-	signed long int										dwCurrentExponent;
+/* If the object is not a boolean type this does nothing and returns cJSON_Invalid else it returns the new type*/
+#define cJSON_SetBoolValue(object, boolValue) ( \
+    (object != NULL && ((object)->type & (cJSON_False|cJSON_True))) ? \
+    (object)->type=((object)->type &(~(cJSON_False|cJSON_True)))|((boolValue)?cJSON_True:cJSON_False) : \
+    cJSON_Invalid\
+)
 
-	signed long int										dwSignBase;
-	signed long int										dwSignExponent;
+/* Macro for iterating over an array or object */
+#define cJSON_ArrayForEach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
 
-	enum cjsonElementType								numberType;
-	enum cjsonParser_StateStackElement_Number_State 	state;
-};
-
-typedef enum cjsonError (*lpfnCJSONCallback_DocumentReady)(
-	struct cjsonValue* lpDocument,
-	void* lpFreeParam
-);
-
-struct cjsonParser {
-	/*
-		Parser state stack.
-	*/
-	struct cjsonParser_StateStackElement*		lpStateStack;
-	unsigned long int							dwStateStackDepth;
-	struct cjsonValue*							lpChildResult;		/* The result of the last child parsed (if any). Also used for the last document (!) */
-
-	/* Configuration */
-	uint32_t									dwFlags;
-	struct cjsonSystemAPI*						lpSystem;
-	lpfnCJSONCallback_DocumentReady 			callbackDocumentReady;
-	void* 										callbackDocumentReadyFreeParam;
-};
-
-
-enum cjsonError cjsonParserCreate(
-	struct cjsonParser** lpOut,
-	uint32_t dwFlags,
-
-	lpfnCJSONCallback_DocumentReady callbackDocumentRead,
-	void* callbackDocumentReadyFreeParam,
-
-	struct cjsonSystemAPI* lpSystem
-);
-enum cjsonError cjsonParserProcessByte(
-	struct cjsonParser* lpParser,
-	char bByte
-);
-enum cjsonError cjsonParserRelease(
-	struct cjsonParser* lpParser
-);
-
-/*
-	Serializer
-*/
-#define CJSON_SERIALIZER__FLAG__PRETTYPRINT			0x00000001
-enum cjsonSerializer_StackEntryType {
-	cjsonSerializer_StackEntryType__Array,
-	cjsonSerializer_StackEntryType__Constant,
-	cjsonSerializer_StackEntryType__Number,
-	cjsonSerializer_StackEntryType__Object,
-	cjsonSerializer_StackEntryType__String
-};
-struct cjsonSerializer_StackEntry {
-	enum cjsonSerializer_StackEntryType				type;
-	struct cjsonSerializer_StackEntry*				lpNext;
-};
-
-/* String serializer */
-enum cjsonSerializer_String_State {
-	cjsonSerializer_String_State__LeadingQuote,
-	cjsonSerializer_String_State__Normal,
-	cjsonSerializer_String_State__Escaped,
-	cjsonSerializer_String_State__Unicode
-};
-struct cjsonSerializer_String {
-	struct cjsonSerializer_StackEntry				base;
-	struct cjsonValue*								lpStringObject;
-
-	enum cjsonSerializer_String_State				state;
-
-	unsigned long int								dwCurrentIndex;		/* Index into the UTF-8 bytestream inside cjsoNValue object */
-	uint8_t											bUnicodeBytes[4];
-	unsigned long int								dwUnicodeBytesWritten;
-};
-
-struct cjsonSerializer_Constant {
-	struct cjsonSerializer_StackEntry				base;
-	enum cjsonElementType							constantType;
-	unsigned long int								dwBytesWritten;
-};
-
-struct cjsonSerializer_Array {
-	struct cjsonSerializer_StackEntry				base;
-	struct cjsonArray*								lpArray;
-	unsigned long int								dwBytesWritten; 	/* used for header and trailer */
-	unsigned long int								dwCurrentIndex;
-	unsigned long int								dwWrittenIndent;
-	unsigned long int								dwWrittenPast;
-};
-
-enum cjsonSerializer_Object_State {
-	cjsonSerializer_Object_State__Header,
-	cjsonSerializer_Object_State__Key,
-	cjsonSerializer_Object_State__Value,
-	cjsonSerializer_Object_State__Trailer
-};
-struct cjsonSerializer_Object {
-	struct cjsonSerializer_StackEntry				base;
-	struct cjsonObject*								lpObject;
-	struct cjsonValue*								lpTempString;
-
-	unsigned long int								dwBytesWritten; /* Used for header, trailer, colon, comma and indent */
-	enum cjsonSerializer_Object_State				state;
-
-	unsigned long int								dwCurrentBucket;
-	struct cjsonObject_BucketEntry*					lpCurrentBucketEntry;
-};
-
-typedef enum cjsonError (*cjsonSerializer_Callback_WriteBytes)(
-	char*											lpData,
-	unsigned long int								dwBytesToWrite,
-	unsigned long int								*lpBytesWrittenOut,
-
-	void*											lpFreeParam
-);
-
-struct cjsonSerializer_Number {
-	struct cjsonSerializer_StackEntry				base;
-	unsigned long int								dwStringLen;
-	unsigned long int								dwWritten;
-	char											bString[];
-};
-
-struct cjsonSerializer {
-	struct cjsonSerializer_StackEntry*				lpTopOfStack;
-	struct cjsonSystemAPI*							lpSystem;
-	unsigned long int								dwStateStackDepth;
-	uint32_t										dwFlags;
-
-	cjsonSerializer_Callback_WriteBytes				callbackWriteBytes;
-	void*											callbackWriteBytesParam;
-};
-
-enum cjsonError cjsonSerializer_Create(
-	struct cjsonSerializer** lpOut,
-	cjsonSerializer_Callback_WriteBytes callback,
-	void* callbackFreeParam,
-	uint32_t dwFlags,
-	struct cjsonSystemAPI* lpSystem
-);
-enum cjsonError cjsonSerializer_Serialize(
-	struct cjsonSerializer* lpSerializer,
-	struct cjsonValue* lpValue
-);
-enum cjsonError cjsonSerializer_Continue(
-	struct cjsonSerializer* lpSerializer
-);
-enum cjsonError cjsonSerializer_Release(
-	struct cjsonSerializer* lpSerializer
-);
+/* malloc/free objects using the malloc/free functions that have been set with cJSON_InitHooks */
+CJSON_PUBLIC(void *) cJSON_malloc(size_t size);
+CJSON_PUBLIC(void) cJSON_free(void *object);
 
 #ifdef __cplusplus
-	} /* extern "C" { */
+}
 #endif
 
-#endif /* #ifndef __is_included__098c74de_0994_4613_bfd7_3d7939e07c89 */
+#endif

@@ -8,6 +8,12 @@
         "oggplayer.h": "c",
         "button_click_pcm.h": "c",
         "button_over_pcm.h": "c",
-        "wiibg_jpg.h": "c"
+        "wiibg_jpg.h": "c",
+        "std_arrow_right_png.h": "c",
+        "font_ttf.h": "c",
+        "carhorn_defs.h": "c",
+        "app_funcs.h": "c",
+        "stdint.h": "c",
+        "utils.h": "c"
     }
 }

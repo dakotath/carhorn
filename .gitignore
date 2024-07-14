@@ -4,3 +4,5 @@ carhorn.elf
 build/
 html/
 latex/
+packCollector/downloads
+packCollector/*.html
